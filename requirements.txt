@@ -1,0 +1,7 @@
+requests
+python-whois
+dnspython
+reportlab
+Pillow
+beautifulsoup4
+ttkthemes

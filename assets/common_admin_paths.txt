@@ -1,0 +1,11 @@
+# assets/common_admin_paths.txt
+admin
+administrator
+admin/login
+login
+user
+cpanel
+webmail
+admin.php
+admin.html
+wp-admin
