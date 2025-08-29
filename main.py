@@ -135,8 +135,7 @@ class ReconApp(ThemedTk):
         status_frame.pack(side=tk.BOTTOM, fill=tk.X)
         self.status_label = ttk.Label(status_frame, text="Ready", anchor='w', font=FONTS["status"], background=COLORS["header"])
         self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        # THIS IS THE CORRECTED PROGRESS BAR CODE
+        
         self.progress_bar = ttk.Progressbar(status_frame, orient='horizontal', mode='determinate', length=200)
         self.progress_bar.pack(side=tk.RIGHT)
 
@@ -156,7 +155,8 @@ class ReconApp(ThemedTk):
         thread.start()
 
     def _scan_worker(self, target: str):
-        total_modules = 7
+        # Updated from 7 to 9 to reflect the new scans (Geolocation, Robots/Sitemap)
+        total_modules = 9 
         self.modules_done = 0
 
         def progress_callback(status_text: str):

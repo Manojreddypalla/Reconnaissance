@@ -7,16 +7,15 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 
-# Optional libs with graceful failure
+# --- UPDATED --- : Added builtwith
 try:
     import whois
+    import dns.resolver as dnsresolver
+    import builtwith
 except ImportError:
     whois = None
-
-try:
-    import dns.resolver as dnsresolver
-except ImportError:
     dnsresolver = None
+    builtwith = None
 
 
 class Scanner:
@@ -39,13 +38,21 @@ class Scanner:
         parsed_uri = urlparse(target)
         return parsed_uri.netloc
 
+    # --- UPDATED --- : run_full_scan now handles IP dependency for geolocation
     def run_full_scan(self):
         """Orchestrates the execution of all scanning modules."""
+        
+        # Resolve IP once at the start
+        ip_address = self._resolve_ip()
+        self.results["IP Address"] = ip_address if ip_address else "Not Found"
+
         scans = {
             "WHOIS": self._scan_whois,
             "DNS Records": self._scan_dns,
+            "IP Geolocation": lambda: self._scan_geolocation(ip_address), # Pass IP to function
             "SSL Certificate": self._scan_ssl,
             "HTTP Headers": self._scan_http_headers,
+            "Robots.txt & Sitemap.xml": self._scan_robots_sitemap, # New scan
             "Tech Stack": self._scan_tech_stack,
             "HTML Metadata": self._scan_html_meta,
             "Admin Panel Finder": self._scan_admin_panels,
@@ -62,17 +69,74 @@ class Scanner:
         
         return self.results
 
+    def _resolve_ip(self) -> str | None:
+        """Resolves the domain to an IP address."""
+        try:
+            return socket.gethostbyname(self.target_domain)
+        except socket.gaierror:
+            return None
+
+    # --- NEW --- : Added IP Geolocation function
+    def _scan_geolocation(self, ip_address: str | None) -> dict:
+        """Gets physical location data from an IP address."""
+        if not ip_address:
+            return {"error": "Cannot geolocate without an IP address."}
+        try:
+            response = requests.get(f"https://ipinfo.io/{ip_address}/json", timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            return {
+                "City": data.get("city", "N/A"),
+                "Region": data.get("region", "N/A"),
+                "Country": data.get("country", "N/A"),
+                "Location": data.get("loc", "N/A"),
+                "Organization": data.get("org", "N/A"),
+            }
+        except requests.RequestException as e:
+            return {"error": f"API request failed: {e}"}
+
+    # --- NEW --- : Added robots.txt and sitemap.xml checker
+    def _scan_robots_sitemap(self) -> dict:
+        """Checks for the existence and content of robots.txt and sitemap.xml."""
+        results = {}
+        for file in ["robots.txt", "sitemap.xml"]:
+            try:
+                url = f"https://{self.target_domain}/{file}"
+                r = requests.get(url, timeout=5)
+                if r.status_code == 200:
+                    results[file] = r.text.strip()
+                else:
+                    results[file] = "Not found (Status: {r.status_code})"
+            except requests.RequestException:
+                results[file] = "Failed to retrieve."
+        return results
+
+    # --- UPDATED --- : Tech stack scan now uses the powerful 'builtwith' library
+    def _scan_tech_stack(self) -> dict:
+        """Identifies technologies used on the website using the builtwith library."""
+        if not builtwith:
+            return {"error": "builtwith library not installed."}
+        try:
+            # Prepend https:// as builtwith expects a full URL
+            url = f"https://{self.target_domain}"
+            tech_info = builtwith.parse(url)
+            return tech_info if tech_info else {"info": "No specific technologies identified."}
+        except Exception as e:
+            return {"error": str(e)}
+    
+    # --- The rest of the functions are the same as before ---
+    
     def _scan_whois(self) -> dict:
         if not whois:
             return {"error": "python-whois library not installed."}
         w = whois.whois(self.target_domain)
-        # Convert datetime objects to strings for serialization
+        clean_whois = {}
         for key, value in w.items():
             if isinstance(value, list):
-                w[key] = [str(v) for v in value]
+                clean_whois[key] = [str(v) for v in value]
             else:
-                w[key] = str(value)
-        return w
+                clean_whois[key] = str(value)
+        return clean_whois
 
     def _scan_dns(self) -> dict:
         if not dnsresolver:
@@ -88,7 +152,6 @@ class Scanner:
         return data
 
     def _scan_http_headers(self) -> dict:
-        """Try HTTPS first, then fall back to HTTP."""
         urls = [f"https://{self.target_domain}", f"http://{self.target_domain}"]
         for url in urls:
             try:
@@ -106,10 +169,8 @@ class Scanner:
         paths_file = os.path.join("assets", "common_admin_paths.txt")
         if not os.path.exists(paths_file):
             return {"error": f"{paths_file} not found."}
-            
         with open(paths_file) as f:
             common_paths = [line.strip() for line in f if line.strip()]
-
         found = []
         for path in common_paths:
             url = f"https://{self.target_domain}/{path}"
@@ -131,28 +192,6 @@ class Scanner:
                 if tag.get("content")
             }
             return meta_info if meta_info else {"info": "No meta tags found."}
-        except requests.RequestException as e:
-            return {"error": str(e)}
-
-    def _scan_tech_stack(self) -> dict:
-        try:
-            r = requests.get(f"https://{self.target_domain}", timeout=5)
-            headers = r.headers
-            soup = BeautifulSoup(r.text, "html.parser")
-            result = {}
-
-            # Server and other tech headers
-            tech_headers = ["Server", "X-Powered-By", "X-AspNet-Version"]
-            for header in tech_headers:
-                if header in headers:
-                    result[header] = headers[header]
-
-            # Meta generator tag
-            generator = soup.find("meta", attrs={"name": "generator"})
-            if generator:
-                result["Generator"] = generator.get("content", "N/A")
-            
-            return result if result else {"info": "No specific tech stack info found."}
         except requests.RequestException as e:
             return {"error": str(e)}
 
