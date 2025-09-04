@@ -83,4 +83,8 @@ This project uses the following key Python packages, which are listed in `requir
 *   `ttkthemes` - For the modern GUI theme.
 *   `Pillow` - For image handling in the GUI (if needed).
 
-## 📁 Project Structure
+## 📁 Team
+
+- **Employee ID:** ST#IS#7329  
+- **Email:** manojreddypalla947@gmail.com
+
